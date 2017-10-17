@@ -1,0 +1,22 @@
+{
+  "name": "cbs-client",
+  "version": "1.0.0",
+  "description": "node.js client for testing challenge-bypass-server",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alxdavids/cbs-client.git"
+  },
+  "author": "Alex Davidson",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/alxdavids/cbs-client/issues"
+  },
+  "homepage": "https://github.com/alxdavids/cbs-client#readme",
+  "dependencies": {
+    "net": "^1.0.2"
+  }
+}
