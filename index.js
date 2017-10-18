@@ -19,6 +19,7 @@ let completeData = "";
 const client = new net.Socket();
 client.setTimeout(3000);
 
+// Check that token signing functionality works
 function GetSignedTokens() {
 	client.connect(PORT, LOCALHOST, function() {
 		console.log('Connected to ' + LOCALHOST + ":" + PORT);
@@ -32,10 +33,11 @@ function GetSignedTokens() {
 
 	client.on('end', function() {
 		let tokens = issUtils.parseIssueResponse(completeData, TOKENS_TO_SIGN);
+		client.destroy();
 	});
 
 	client.on('close', function() {
-		console.log('Connection closed');
+		console.log("All good, connection closing.");
 	});
 
 	client.on('error', function(err) {

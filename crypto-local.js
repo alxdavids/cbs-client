@@ -328,12 +328,12 @@ const funcs = {
 
         // Recalculate C' and check if C =?= C'
         let h = new sjcl.hash.sha256();
-        h.update(funcs.sec1EncodePoint(dleq.G));
-        h.update(funcs.sec1EncodePoint(dleq.H));
-        h.update(funcs.sec1EncodePoint(dleq.M));
-        h.update(funcs.sec1EncodePoint(dleq.Z));
-        h.update(funcs.sec1EncodePoint(A));
-        h.update(funcs.sec1EncodePoint(B));
+        h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(dleq.G)));
+        h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(dleq.H)));
+        h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(dleq.M)));
+        h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(dleq.Z)));
+        h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(A)));
+        h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(B)));
         const digestBits = h.finalize();
         const receivedDigestBits = dleq.C.toBits();
         if (!sjcl.bitArray.equal(digestBits, receivedDigestBits)) {
