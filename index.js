@@ -14,6 +14,8 @@ const atob = require('atob');
 const LOCALHOST = '127.0.0.1';
 const PORT = 2416;
 const TOKENS_TO_SIGN = 5;
+let tokens;
+let signatures;
 let completeData = "";
 
 const client = new net.Socket();
@@ -23,8 +25,9 @@ client.setTimeout(3000);
 function GetSignedTokens() {
 	client.connect(PORT, LOCALHOST, function() {
 		console.log('Connected to ' + LOCALHOST + ":" + PORT);
-		const wrapReq = issUtils.GenerateWrappedIssueRequest(TOKENS_TO_SIGN);
-		client.write(wrapReq);
+		const req = issUtils.GenerateWrappedIssueRequest(TOKENS_TO_SIGN);
+		tokens = req.tokens;
+		client.write(req.wrap);
 	});
 
 	client.on('data', function(data) {
@@ -32,7 +35,7 @@ function GetSignedTokens() {
 	});
 
 	client.on('end', function() {
-		let tokens = issUtils.parseIssueResponse(completeData, TOKENS_TO_SIGN);
+		let signatures = issUtils.parseIssueResponse(completeData, TOKENS_TO_SIGN, tokens);
 		client.destroy();
 	});
 

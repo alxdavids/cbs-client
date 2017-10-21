@@ -23,6 +23,7 @@ const DLEQ_PROOF_INCOMPLETE = "[privacy-pass]: DLEQ proof has components that ar
 const INCORRECT_CURVE_ERR = "[privacy-pass]: Curve is incorrect for one or more points in proof";
 const DIGEST_INEQUALITY_ERR = "[privacy-pass]: Recomputed digest does not equal received digest";
 const PARSE_ERR = "[privacy-pass]: Error parsing proof";
+const INCONSISTENT_PROOF_ERR = "[privacy-pass]: Tokens/signatures are inconsistent with sent proof";
 
 const activeG = config.G;
 const activeH = config.H;
@@ -298,14 +299,16 @@ const funcs = {
     // 
     // input: marshaled JSON DLEQ proof
     // output: bool
-    verifyBatchProof: function(proof) {
+    verifyBatchProof: function(proof, tokens, signatures) {
         let batchProofM = funcs.getMarshaledBatchProof(proof);
         let bp = funcs.unmarshalBatchProof(batchProofM);
         if (!bp) {
             // Error has probably occurred
             return false;
         }
-        if (!funcs.isBatchProofCompleteAndSane(bp)) {
+        let chkM = tokens;
+        let chkZ = signatures;
+        if (!funcs.isBatchProofCompleteAndSane(bp, chkM, chkZ)) {
             return false;
         }
         return funcs.verifyDleq(bp.P);
@@ -347,7 +350,7 @@ const funcs = {
 
     // Check that the underlying DLEQ proof is well-defined
     isDleqCompleteAndSane: function(dleq) {
-        if (!(dleq.M || dleq.Z || dleq.R || dleq.C)) {
+        if (!dleq.M || !dleq.Z || !dleq.R || !dleq.C) {
             console.error(DLEQ_PROOF_INCOMPLETE);
             return false;
         }
@@ -368,25 +371,32 @@ const funcs = {
     },
 
     // Checks that the batch proof is well-defined
-    isBatchProofCompleteAndSane: function(bp) {
+    isBatchProofCompleteAndSane: function(bp, chkM, chkZ) {
         // Check commitments are present
         let G = bp.P.G;
         let H = bp.P.H;
-        if (!(G || H)) {
+        if (!G || !H) {
             console.error(NO_COMMITMENTS_ERR);
             return false;
         }
         // Check that point sets are present and correct
-        if (!(bp.M || bp.Z) || bp.M.length !== bp.Z.length) {
+        if (!bp.M || !bp.Z || bp.M.length !== bp.Z.length) {
             console.error(INCORRECT_POINT_SETS_ERR);
             return false;
         }
-        // Check that the curve is correct
+        // Check that the curve is correct and that the values of M, Z are consistent
         for (let i=0; i<bp.M.length; i++) {
             if (sjcl.ecc.curveName(bp.M[i].curve) != sjcl.ecc.curveName(G.curve) ||
                 sjcl.ecc.curveName(bp.Z[i].curve) != sjcl.ecc.curveName(G.curve) ||
                 sjcl.ecc.curveName(bp.M[i].curve) != P256_NAME) {
                 console.error(INCORRECT_CURVE_ERR);
+                return false;
+            }
+            // If the values of M and Z are consistent then we can use dleq.M and 
+            // dleq.Z to verify the proof later
+            if (!sjcl.bitArray.equal(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(bp.M[i])), sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(chkM[i].point))) || 
+                !sjcl.bitArray.equal(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(bp.Z[i])), sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(chkZ[i])))) {
+                console.error(INCONSISTENT_PROOF_ERR);
                 return false;
             }
         }

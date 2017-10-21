@@ -13,7 +13,7 @@ const atob = require('atob');
 const btoa = require('btoa');
 
 // Parse the marshaled response from the server
-function parseIssueResponse(data, n) {
+function parseIssueResponse(data, n, tokens) {
     // decodes base-64
     const signaturesJSON = atob(data);
     // parses into JSON
@@ -39,7 +39,7 @@ function parseIssueResponse(data, n) {
     });
 
     // Verify the DLEQ batch proof before handing back the usable points
-    if (!crypto.verifyBatchProof(batchProof)) {
+    if (!crypto.verifyBatchProof(batchProof, tokens, usablePoints)) {
         throw new Error("[privacy-pass]: Unable to verify DLEQ proof.");
     }
 
@@ -50,7 +50,7 @@ function parseIssueResponse(data, n) {
 function GenerateWrappedIssueRequest(n) {
 	const tokens = GenerateNewTokens(n);
 	const issueReq = BuildIssueRequest(tokens);
-	return WrapIssueRequest(issueReq);
+	return {wrap: WrapIssueRequest(issueReq), tokens: tokens};
 }
 
 // Wraps an issue request in the format needed for the
