@@ -23,7 +23,8 @@ const DLEQ_PROOF_INCOMPLETE = "[privacy-pass]: DLEQ proof has components that ar
 const INCORRECT_CURVE_ERR = "[privacy-pass]: Curve is incorrect for one or more points in proof";
 const DIGEST_INEQUALITY_ERR = "[privacy-pass]: Recomputed digest does not equal received digest";
 const PARSE_ERR = "[privacy-pass]: Error parsing proof";
-const INCONSISTENT_PROOF_ERR = "[privacy-pass]: Tokens/signatures are inconsistent with sent proof";
+const INCONSISTENT_BATCH_PROOF_ERR = "[privacy-pass]: Tokens/signatures are inconsistent with batch proof";
+const INCONSISTENT_DLEQ_PROOF_ERR = "[privacy-pass]: Tokens/signatures are inconsistent with underlying DLEQ proof";
 
 const activeG = config.G;
 const activeH = config.H;
@@ -311,13 +312,14 @@ const funcs = {
         if (!funcs.isBatchProofCompleteAndSane(bp, chkM, chkZ)) {
             return false;
         }
-        return funcs.verifyDleq(bp.P);
+        return funcs.verifyDleq(bp, chkM, chkZ);
     },
 
     // Verify the NIZK DLEQ proof
-    verifyDleq: function(dleq) {
+    verifyDleq: function(bp, chkM, chkZ) {
         // Check sanity of proof
-        if (!funcs.isDleqCompleteAndSane(dleq)) {
+        let dleq = bp.P;
+        if (!funcs.isDleqCompleteAndSane(dleq, chkM, chkZ, bp.C)) {
             return false;
         }
 
@@ -349,7 +351,7 @@ const funcs = {
     },
 
     // Check that the underlying DLEQ proof is well-defined
-    isDleqCompleteAndSane: function(dleq) {
+    isDleqCompleteAndSane: function(dleq, chkM, chkZ, proofC) {
         if (!dleq.M || !dleq.Z || !dleq.R || !dleq.C) {
             console.error(DLEQ_PROOF_INCOMPLETE);
             return false;
@@ -367,6 +369,25 @@ const funcs = {
             console.error(INCORRECT_CURVE_ERR);
             return false;
         }
+
+        let chkMPoint;
+        let chkZPoint;
+        for (let i=0; i<chkM.length; i++) {
+            let cMi = funcs._scalarMult(proofC[i], chkM[i].point);
+            let cZi = funcs._scalarMult(proofC[i], chkZ[i]);
+
+            if (!chkMPoint && !chkZPoint) {
+                chkMPoint = cMi;
+                chkZPoint = cZi;
+            } else {
+                chkMPoint = chkMPoint.toJac().add(cMi).toAffine();
+                chkZPoint = chkZPoint.toJac().add(cZi).toAffine();
+            }
+        }
+        if (!sjcl.bitArray.equal(dleq.M.toBits(), chkMPoint.toBits()) || !sjcl.bitArray.equal(dleq.Z.toBits(), chkZPoint.toBits())) {
+            console.error(INCONSISTENT_DLEQ_PROOF_ERR);
+            return false;
+        }
         return true;
     },
 
@@ -380,12 +401,14 @@ const funcs = {
             return false;
         }
         // Check that point sets are present and correct
-        if (!bp.M || !bp.Z || bp.M.length !== bp.Z.length) {
+        let lenM = bp.M.length;
+        let lenZ = bp.Z.length;
+        if (!bp.M || !bp.Z || lenM == 0 || lenZ == 0 || lenM !== lenZ || chkM.length !== lenM || chkZ.length !== lenZ) {
             console.error(INCORRECT_POINT_SETS_ERR);
             return false;
         }
         // Check that the curve is correct and that the values of M, Z are consistent
-        for (let i=0; i<bp.M.length; i++) {
+        for (let i=0; i<lenM; i++) {
             if (sjcl.ecc.curveName(bp.M[i].curve) != sjcl.ecc.curveName(G.curve) ||
                 sjcl.ecc.curveName(bp.Z[i].curve) != sjcl.ecc.curveName(G.curve) ||
                 sjcl.ecc.curveName(bp.M[i].curve) != P256_NAME) {
@@ -394,9 +417,9 @@ const funcs = {
             }
             // If the values of M and Z are consistent then we can use dleq.M and 
             // dleq.Z to verify the proof later
-            if (!sjcl.bitArray.equal(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(bp.M[i])), sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(chkM[i].point))) || 
-                !sjcl.bitArray.equal(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(bp.Z[i])), sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(chkZ[i])))) {
-                console.error(INCONSISTENT_PROOF_ERR);
+            if (!sjcl.bitArray.equal(bp.M[i].toBits(), chkM[i].point.toBits()) || 
+                !sjcl.bitArray.equal(bp.Z[i].toBits(), chkZ[i].toBits())) {
+                console.error(INCONSISTENT_BATCH_PROOF_ERR);
                 return false;
             }
         }
@@ -418,9 +441,9 @@ const funcs = {
         bp.M = funcs.batchDecodePoints(batchProofM.M);
         bp.Z = funcs.batchDecodePoints(batchProofM.Z);
         let encC = batchProofM.C;
-        let decC = new ArrayBuffer(encC.length);
-        for (let i=0; i<decC.length; i++) {
-            decC[i] = funcs.getByteArrayFromB64(encC[i]);
+        let decC = [];
+        for (let i=0; i<encC.length; i++) {
+            decC[i] = funcs.getBigNumFromB64(encC[i]);
         }
         bp.C = decC;
 
