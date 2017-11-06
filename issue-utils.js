@@ -2,12 +2,11 @@
 /*jshint node: true */
 
 /**
- * Contains utils mimicing the background functionality needed
- * from background.js at https://github.com/cloudflare/challenge-bypass-extension
+ * Contains utils mimicing the issuance functionality needed
+ * from background.js at https://github.com/privacypass/challenge-bypass-extension
  */
 
 "use strict";
-const sjcl = require('./sjcl-local.js');
 const crypto = require('./crypto-local.js');
 const atob = require('atob');
 const btoa = require('btoa');
@@ -103,45 +102,37 @@ function BuildIssueRequest(tokens) {
     return btoa(JSON.stringify({ type: "Issue", contents: contents}));
 }
 
-// Creates a redemption header for the specified request. The format is
-// base64(json(BlindTokenRequest)) where BlindTokenRequest corresponds to the
-// following Go struct:
-//
-// type BlindTokenRequest struct {
-//      Type     ReqType  `json:"type"`
-//      Contents [][]byte `json:"contents"`
-// }
-//
-// Note that Go will automatically render and decode []byte as base64 encoded
-// strings.
-//
-// For a redemption request, type will be "Redeem" and the contents will be a
-// list of [token preimage, HMAC(host, "%s %s" % (method, uri))] where the HMAC
-// key is derived from the signed point corresponding to the token preimage.
-function BuildRedeemHeader(token, host, path) {
-    const sharedPoint = crypto.unblindPoint(token.blind, token.point);
-    const derivedKey = crypto.deriveKey(sharedPoint, token.token);
-
-    const hostBits = sjcl.codec.utf8String.toBits(host);
-    const hostBytes = sjcl.codec.bytes.fromBits(hostBits);
-
-    const pathBits = sjcl.codec.utf8String.toBits(path);
-    const pathBytes = sjcl.codec.bytes.fromBits(pathBits);
-
-    const binding = crypto.createRequestBinding(derivedKey, [hostBytes, pathBytes]);
-
-    let contents = [];
-    contents.push(token.token);
-    contents.push(binding);
-
-    return btoa(JSON.stringify({ type: "Redeem", contents: contents}));
-}
-
 /**
  * [END] token.js
  */
 
+/**
+ * [START] Other functions
+ */
+
+// Used for creating the correct encoding for storing tokens and signatures
+function StoreTokens(tokens, signedPoints) {
+    let storableTokens = [];
+    for (var i = 0; i < tokens.length; i++) {
+        let t = tokens[i];
+        storableTokens[i] = getTokenEncoding(t,signedPoints[i]);
+    }
+    return storableTokens;
+}
+
+// SJCL points are cyclic as objects, so we have to flatten them.
+function getTokenEncoding(t, curvePoint) {
+    let storablePoint = crypto.encodeStorablePoint(curvePoint);
+    let storableBlind = t.blind.toString();
+    return { token: t.token, point: storablePoint, blind: storableBlind };
+}
+
+/**
+ * [END] Other functions
+ */
+
 module.exports = {
 	GenerateWrappedIssueRequest: GenerateWrappedIssueRequest,
+    StoreTokens: StoreTokens,
 	parseIssueResponse: parseIssueResponse,
 };

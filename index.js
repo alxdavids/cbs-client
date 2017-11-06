@@ -8,44 +8,92 @@
 
 const net = require('net');
 const issUtils = require('./issue-utils.js');
+const redUtils = require('./redeem-utils.js');
 const sjcl = require('./sjcl-local.js');
 const atob = require('atob');
 
 const LOCALHOST = '127.0.0.1';
 const PORT = 2416;
 const TOKENS_TO_SIGN = 5;
+const HOST = 'HOST';
+const PATH = 'PATH';
 let tokens;
-let signatures;
+let storedTokens; 
 let completeData = "";
+let tokensRetrieved = false;
 
-const client = new net.Socket();
-client.setTimeout(3000);
+const clientIss = new net.Socket();
+clientIss.setTimeout(3000);
+const clientRed = new net.Socket();
+clientRed.setTimeout(3000);
 
 // Check that token signing functionality works
 function GetSignedTokens() {
-	client.connect(PORT, LOCALHOST, function() {
-		console.log('Connected to ' + LOCALHOST + ":" + PORT);
+	clientIss.connect(PORT, LOCALHOST, function() {
+		console.log('Connected to ' + LOCALHOST + ":" + PORT + " for signing.");
 		const req = issUtils.GenerateWrappedIssueRequest(TOKENS_TO_SIGN);
 		tokens = req.tokens;
-		client.write(req.wrap);
+		clientIss.write(req.wrap);
 	});
 
-	client.on('data', function(data) {
+	clientIss.on('data', function(data) {
 		completeData += data;
 	});
 
-	client.on('end', function() {
+	clientIss.on('end', function() {
 		let signatures = issUtils.parseIssueResponse(completeData, TOKENS_TO_SIGN, tokens);
-		client.destroy();
+		storedTokens = issUtils.StoreTokens(tokens, signatures);
+		tokensRetrieved = true;
+		clientIss.destroy();
+		RedeemToken();
 	});
 
-	client.on('close', function() {
+	clientIss.on('close', function() {
 		console.log("All good, connection closing.");
 	});
 
-	client.on('error', function(err) {
+	clientIss.on('error', function(err) {
 		console.error(err);
-		client.destroy();
+		clientIss.destroy();
+	});
+}
+
+// Redeem one of the tokens that we were given
+function RedeemToken() {
+	clientRed.connect(PORT, LOCALHOST, function() {
+		console.log('Connected to ' + LOCALHOST + ":" + PORT + " for redemption.");
+		const token = storedTokens[0];
+		storedTokens = storedTokens.slice(1);
+		if (token == null) {
+			console.error("Token is null");
+			clientRed.destroy();
+		}
+		const redStr = redUtils.BuildRedeemHeader(token, HOST, PATH);
+		const wrappedRedReq = redUtils.GenerateWrappedRedemptionRequest(redStr, HOST, PATH);
+		clientRed.write(wrappedRedReq);
+	});
+
+	clientRed.on('data', function(data) {
+		const dataStr = sjcl.codec.utf8String.fromBits(sjcl.codec.bytes.toBits(data));
+		if (dataStr !== "success") {
+			console.error("An error occurred server-side, redemption failed");
+			console.log(dataStr);
+		} else {
+			console.log("Successful redemption.")
+		}
+	});
+
+	clientRed.on('end', function() {
+		clientRed.destroy();
+	});
+
+	clientRed.on('close', function() {
+		console.log("All good, connection closing.");
+	});
+
+	clientRed.on('error', function(err) {
+		console.error(err);
+		clientRed.destroy();
 	});
 }
 
