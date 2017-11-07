@@ -1,0 +1,73 @@
+Run 1 (client)
+=====
+
+Connected to 127.0.0.1:2416 for signing.
+token-gen: 1177.313ms
+issue-req: 2.229ms
+parse-all: 2.896ms
+verify-dleq: 1946.028ms
+token-store: 1.569ms
+whole-issue: 3992.267ms
+All good, connection closing.
+Connected to 127.0.0.1:2416 for redemption.
+redeem-req: 32.287ms
+Successful redemption.
+whole-redeem: 2002.607ms
+All good, connection closing.
+[Finished in 6.1s]
+
+Signing: 8.352577ms
+Proof: 21.309116ms
+Total sign: 38.776316ms
+Shared key: 734.589µs
+Verify: 9.524µs
+Total redeem: 1.816998ms
+
+Run 2
+=====
+
+Connected to 127.0.0.1:2416 for signing.
+token-gen: 1094.502ms
+issue-req: 1.627ms
+parse-all: 1.596ms
+verify-dleq: 1928.955ms
+token-store: 1.199ms
+whole-issue: 3950.895ms
+All good, connection closing.
+Connected to 127.0.0.1:2416 for redemption.
+redeem-req: 33.834ms
+Successful redemption.
+whole-redeem: 2002.572ms
+All good, connection closing.
+
+Signing: 2.29361ms
+Proof: 7.847443ms
+Total sign: 16.62671ms
+Shared key: 572.937µs
+Verify: 8.715µs
+Total redeem: 1.538209ms
+
+Run 3
+=====
+
+Connected to 127.0.0.1:2416 for signing.
+token-gen: 1220.030ms
+issue-req: 2.336ms
+parse-all: 2.516ms
+verify-dleq: 1955.059ms
+token-store: 1.307ms
+whole-issue: 4003.374ms
+All good, connection closing.
+Connected to 127.0.0.1:2416 for redemption.
+redeem-req: 33.127ms
+Successful redemption.
+whole-redeem: 2002.373ms
+All good, connection closing.
+[Finished in 6.1s]
+
+Signing: 8.528909ms
+Proof: 23.062011ms
+Total sign: 41.802938ms
+Shared key: 737.41µs
+Verify: 12.479µs
+Total redeem: 1.766864ms

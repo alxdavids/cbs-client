@@ -14,13 +14,12 @@ const atob = require('atob');
 
 const LOCALHOST = '127.0.0.1';
 const PORT = 2416;
-const TOKENS_TO_SIGN = 5;
+const TOKENS_TO_SIGN = 30;
 const HOST = 'HOST';
 const PATH = 'PATH';
 let tokens;
 let storedTokens; 
 let completeData = "";
-let tokensRetrieved = false;
 
 const clientIss = new net.Socket();
 clientIss.setTimeout(3000);
@@ -30,6 +29,7 @@ clientRed.setTimeout(3000);
 // Check that token signing functionality works
 function GetSignedTokens() {
 	clientIss.connect(PORT, LOCALHOST, function() {
+		console.time('whole-issue');
 		console.log('Connected to ' + LOCALHOST + ":" + PORT + " for signing.");
 		const req = issUtils.GenerateWrappedIssueRequest(TOKENS_TO_SIGN);
 		tokens = req.tokens;
@@ -42,9 +42,11 @@ function GetSignedTokens() {
 
 	clientIss.on('end', function() {
 		let signatures = issUtils.parseIssueResponse(completeData, TOKENS_TO_SIGN, tokens);
+		console.time('token-store');
 		storedTokens = issUtils.StoreTokens(tokens, signatures);
-		tokensRetrieved = true;
+		console.timeEnd('token-store');
 		clientIss.destroy();
+		console.timeEnd('whole-issue');
 		RedeemToken();
 	});
 
@@ -61,6 +63,7 @@ function GetSignedTokens() {
 // Redeem one of the tokens that we were given
 function RedeemToken() {
 	clientRed.connect(PORT, LOCALHOST, function() {
+		console.time('whole-redeem');
 		console.log('Connected to ' + LOCALHOST + ":" + PORT + " for redemption.");
 		const token = storedTokens[0];
 		storedTokens = storedTokens.slice(1);
@@ -68,8 +71,10 @@ function RedeemToken() {
 			console.error("Token is null");
 			clientRed.destroy();
 		}
+		console.time('redeem-req');
 		const redStr = redUtils.BuildRedeemHeader(token, HOST, PATH);
 		const wrappedRedReq = redUtils.GenerateWrappedRedemptionRequest(redStr, HOST, PATH);
+		console.timeEnd('redeem-req');
 		clientRed.write(wrappedRedReq);
 	});
 
@@ -81,6 +86,7 @@ function RedeemToken() {
 		} else {
 			console.log("Successful redemption.")
 		}
+		console.timeEnd('whole-redeem');
 	});
 
 	clientRed.on('end', function() {

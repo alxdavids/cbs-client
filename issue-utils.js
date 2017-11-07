@@ -29,6 +29,7 @@ function parseIssueResponse(data, n, tokens) {
     }
 
     let usablePoints = [];
+    console.time('parse-all');
     signatures.forEach(function(signature) {
         let usablePoint = crypto.sec1DecodePoint(signature);
         if (usablePoint == null) {
@@ -36,19 +37,26 @@ function parseIssueResponse(data, n, tokens) {
         }
         usablePoints.push(usablePoint);
     });
+    console.timeEnd('parse-all');
 
     // Verify the DLEQ batch proof before handing back the usable points
+    console.time('verify-dleq');
     if (!crypto.verifyBatchProof(batchProof, tokens, usablePoints)) {
         throw new Error("[privacy-pass]: Unable to verify DLEQ proof.");
     }
+    console.timeEnd('verify-dleq');
 
     return usablePoints;
 }
 
 // Generates n tokens and returns a wrapped issue request
 function GenerateWrappedIssueRequest(n) {
+    console.time('token-gen');
 	const tokens = GenerateNewTokens(n);
+    console.timeEnd('token-gen');
+    console.time('issue-req');
 	const issueReq = BuildIssueRequest(tokens);
+    console.timeEnd('issue-req');
 	return {wrap: WrapIssueRequest(issueReq), tokens: tokens};
 }
 
