@@ -33,6 +33,7 @@ function GetSignedTokens() {
 		console.log('Connected to ' + LOCALHOST + ":" + PORT + " for signing.");
 		const req = issUtils.GenerateWrappedIssueRequest(TOKENS_TO_SIGN);
 		tokens = req.tokens;
+		console.log("Request length: " + req.wrap.length);
 		clientIss.write(req.wrap);
 	});
 
@@ -41,6 +42,7 @@ function GetSignedTokens() {
 	});
 
 	clientIss.on('end', function() {
+		console.log("Response length: " + completeData.length);
 		let signatures = issUtils.parseIssueResponse(completeData, TOKENS_TO_SIGN, tokens);
 		console.time('token-store');
 		storedTokens = issUtils.StoreTokens(tokens, signatures);
@@ -75,6 +77,7 @@ function RedeemToken() {
 		const redStr = redUtils.BuildRedeemHeader(token, HOST, PATH);
 		const wrappedRedReq = redUtils.GenerateWrappedRedemptionRequest(redStr, HOST, PATH);
 		console.timeEnd('redeem-req');
+		console.log("Redeem request length: " + wrappedRedReq.length);
 		clientRed.write(wrappedRedReq);
 	});
 

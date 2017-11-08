@@ -1,3 +1,7 @@
+Request length: 1937
+Response length: 17076
+Redeem request length: 393
+
 Run 1 (client)
 =====
 
