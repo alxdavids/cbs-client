@@ -13,18 +13,14 @@ const sjcl = require('./sjcl-local.js');
 const p256 = sjcl.ecc.curves.c256;
 const config = require('./test-config.js');
 const atob = require('atob');
+const createKeccakHash = require('keccak');
 
 const BATCH_PROOF_PREFIX = "batch-proof=";
 const P256_NAME = "c256";
-const NO_COMMITMENTS_ERR = "[privacy-pass]: Batch proof does not contain commitments";
-const INCORRECT_POINT_SETS_ERR = "[privacy-pass]: Point sets for batch proof are incorrect";
-const COMMITMENT_MISMATCH_ERR = "[privacy-pass]: Mismatch between stored and received commitments";
-const DLEQ_PROOF_INCOMPLETE = "[privacy-pass]: DLEQ proof has components that are not defined";
-const INCORRECT_CURVE_ERR = "[privacy-pass]: Curve is incorrect for one or more points in proof";
+const MASK = ["0xff", "0x1", "0x3", "0x7", "0xf", "0x1f", "0x3f", "0x7f"];
+
 const DIGEST_INEQUALITY_ERR = "[privacy-pass]: Recomputed digest does not equal received digest";
 const PARSE_ERR = "[privacy-pass]: Error parsing proof";
-const INCONSISTENT_BATCH_PROOF_ERR = "[privacy-pass]: Tokens/signatures are inconsistent with batch proof";
-const INCONSISTENT_DLEQ_PROOF_ERR = "[privacy-pass]: Tokens/signatures are inconsistent with underlying DLEQ proof";
 
 const activeG = config.G;
 const activeH = config.H;
@@ -300,43 +296,34 @@ const funcs = {
     // 
     // input: marshaled JSON DLEQ proof
     // output: bool
-    verifyBatchProof: function(proof, tokens, signatures) {
-        let batchProofM = funcs.getMarshaledBatchProof(proof);
-        let bp = funcs.unmarshalBatchProof(batchProofM);
-        if (!bp) {
+    verifyProof: function(proofObj, tokens, signatures) {
+        let bp = funcs.getMarshaledBatchProof(proofObj);
+        const dleq = funcs.retrieveProof(bp);
+        if (!dleq) {
             // Error has probably occurred
             return false;
         }
-        let chkM = tokens;
-        let chkZ = signatures;
-        if (!funcs.isBatchProofCompleteAndSane(bp, chkM, chkZ)) {
-            return false;
-        }
-        return funcs.verifyDleq(bp, chkM, chkZ);
-    },
+        const chkM = tokens;
+        const chkZ = signatures;
+        const pointG = funcs.sec1DecodePoint(activeG);
+        const pointH = funcs.sec1DecodePoint(activeH);
 
-    // Verify the NIZK DLEQ proof
-    verifyDleq: function(bp, chkM, chkZ) {
-        // Check sanity of proof
-        let dleq = bp.P;
-        if (!funcs.isDleqCompleteAndSane(dleq, chkM, chkZ, bp.C)) {
-            return false;
-        }
-
-        let cH = funcs._scalarMult(dleq.C, dleq.H);
-        let rG = funcs._scalarMult(dleq.R, dleq.G);
+        // Recompute A and B for proof verification
+        let cH = funcs._scalarMult(dleq.C, pointH);
+        let rG = funcs._scalarMult(dleq.R, pointG);
         const A = cH.toJac().add(rG).toAffine();
 
-        let cZ = funcs._scalarMult(dleq.C, dleq.Z);
-        let rM = funcs._scalarMult(dleq.R, dleq.M);
+        let composites = funcs.recomputeComposites(chkM, chkZ);
+        let cZ = funcs._scalarMult(dleq.C, composites.Z);
+        let rM = funcs._scalarMult(dleq.R, composites.M);
         const B = cZ.toJac().add(rM).toAffine();
 
         // Recalculate C' and check if C =?= C'
         let h = new sjcl.hash.sha256();
-        h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(dleq.G)));
-        h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(dleq.H)));
-        h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(dleq.M)));
-        h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(dleq.Z)));
+        h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(pointG)));
+        h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(pointH)));
+        h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(composites.M)));
+        h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(composites.Z)));
         h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(A)));
         h.update(sjcl.codec.bytes.toBits(funcs.sec1EncodePoint(B)));
         const digestBits = h.finalize();
@@ -350,116 +337,73 @@ const funcs = {
         return true;
     },
 
-    // Check that the underlying DLEQ proof is well-defined
-    isDleqCompleteAndSane: function(dleq, chkM, chkZ, proofC) {
-        if (!dleq.M || !dleq.Z || !dleq.R || !dleq.C) {
-            console.error(DLEQ_PROOF_INCOMPLETE);
-            return false;
-        }
-
-        // Check that all points are on the same curve
-        let curveG = dleq.G.curve;
-        let curveH = dleq.H.curve;
-        let curveM = dleq.M.curve;
-        let curveZ = dleq.Z.curve;
-        if (sjcl.ecc.curveName(curveG) != sjcl.ecc.curveName(curveH) ||
-            sjcl.ecc.curveName(curveH) != sjcl.ecc.curveName(curveM) ||
-            sjcl.ecc.curveName(curveM) != sjcl.ecc.curveName(curveZ) ||
-            sjcl.ecc.curveName(curveG) != P256_NAME) {
-            console.error(INCORRECT_CURVE_ERR);
-            return false;
-        }
-
-        let chkMPoint;
-        let chkZPoint;
+    // Recompute the composite M and Z values for verifying DLEQ
+    recomputeComposites: function(chkM, chkZ) {
+        let seed = funcs.getSeedPRNG(chkM, chkZ);
+        let shake = createKeccakHash("shake256");
+        shake.update(Buffer.from(seed, 'hex'));
+        let cM;
+        let cZ;
+        let C = [];
         for (let i=0; i<chkM.length; i++) {
-            let cMi = funcs._scalarMult(proofC[i], chkM[i].point);
-            let cZi = funcs._scalarMult(proofC[i], chkZ[i]);
-
-            if (!chkMPoint && !chkZPoint) {
-                chkMPoint = cMi;
-                chkZPoint = cZi;
+            let ci = funcs.getShakeScalar(shake);
+            let cMi = funcs._scalarMult(ci, chkM[i].point);
+            let cZi = funcs._scalarMult(ci, chkZ[i]);
+            if (cM === undefined || cZ === undefined) {
+                cM = cMi;
+                cZ = cZi;
             } else {
-                chkMPoint = chkMPoint.toJac().add(cMi).toAffine();
-                chkZPoint = chkZPoint.toJac().add(cZi).toAffine();
+                cM = cM.toJac().add(cMi).toAffine();
+                cZ = cZ.toJac().add(cZi).toAffine();
             }
         }
-        if (!sjcl.bitArray.equal(dleq.M.toBits(), chkMPoint.toBits()) || !sjcl.bitArray.equal(dleq.Z.toBits(), chkZPoint.toBits())) {
-            console.error(INCONSISTENT_DLEQ_PROOF_ERR);
-            return false;
-        }
-        return true;
+
+        return {M: cM, Z: cZ};
     },
 
-    // Checks that the batch proof is well-defined
-    isBatchProofCompleteAndSane: function(bp, chkM, chkZ) {
-        // Check commitments are present
-        let G = bp.P.G;
-        let H = bp.P.H;
-        if (!G || !H) {
-            console.error(NO_COMMITMENTS_ERR);
-            return false;
-        }
-        // Check that point sets are present and correct
-        let lenM = bp.M.length;
-        let lenZ = bp.Z.length;
-        if (!bp.M || !bp.Z || lenM == 0 || lenZ == 0 || lenM !== lenZ || chkM.length !== lenM || chkZ.length !== lenZ) {
-            console.error(INCORRECT_POINT_SETS_ERR);
-            return false;
-        }
-        // Check that the curve is correct and that the values of M, Z are consistent
-        for (let i=0; i<lenM; i++) {
-            if (sjcl.ecc.curveName(bp.M[i].curve) != sjcl.ecc.curveName(G.curve) ||
-                sjcl.ecc.curveName(bp.Z[i].curve) != sjcl.ecc.curveName(G.curve) ||
-                sjcl.ecc.curveName(bp.M[i].curve) != P256_NAME) {
-                console.error(INCORRECT_CURVE_ERR);
-                return false;
+    // Squeeze a seeded shake for output
+    getShakeScalar: function(shake) {
+        const curveOrder = p256.r;
+        const bitLen = sjcl.bitArray.bitLength(curveOrder.toBits());
+        const mask = MASK[bitLen % 8];
+
+        while(true) {
+            let out = shake.squeeze(32, 'hex');
+            // Masking is not strictly necessary for p256 but better to be completely 
+            // compatible in case that the curve changes
+            let h = "0x" + out.substr(0,2);
+            let mh = sjcl.codec.hex.fromBits(sjcl.codec.bytes.toBits([h & mask]));
+            out = mh + out.substr(2);
+            let nOut = funcs.getBigNumFromHex(out);
+            // Reject samples outside of correct range
+            if (nOut.greaterEquals(curveOrder)) {
+                continue;
             }
-            // If the values of M and Z are consistent then we can use dleq.M and 
-            // dleq.Z to verify the proof later
-            if (!sjcl.bitArray.equal(bp.M[i].toBits(), chkM[i].point.toBits()) || 
-                !sjcl.bitArray.equal(bp.Z[i].toBits(), chkZ[i].toBits())) {
-                console.error(INCONSISTENT_BATCH_PROOF_ERR);
-                return false;
-            }
+            return nOut;
         }
-        return true;
+    },
+
+    getSeedPRNG: function(chkM, chkZ) {
+        let sha256 = new sjcl.hash.sha256();
+        sha256.update(funcs.encodePointForPRNG(funcs.sec1DecodePoint(activeG)));
+        sha256.update(funcs.encodePointForPRNG(funcs.sec1DecodePoint(activeH)));
+        for (let i=0; i<chkM.length; i++) {
+            sha256.update(funcs.encodePointForPRNG(chkM[i].point));
+            sha256.update(funcs.encodePointForPRNG(chkZ[i]));
+        }
+        return sjcl.codec.hex.fromBits(sha256.finalize());
     },
 
     // Returns a decoded batch proof as a map
-    unmarshalBatchProof: function(batchProofM) {
-        let bp = new Map();
+    retrieveProof: function(bp) {
         let dleqProof;
         try {
-            dleqProof = funcs.parseDleqProof(atob(batchProofM.P));
+            dleqProof = funcs.parseDleqProof(atob(bp.P));
         } catch(e) {
             console.error(PARSE_ERR);
             return;
         }
-        
-        bp.P = dleqProof;
-        bp.M = funcs.batchDecodePoints(batchProofM.M);
-        bp.Z = funcs.batchDecodePoints(batchProofM.Z);
-        let encC = batchProofM.C;
-        let decC = [];
-        for (let i=0; i<encC.length; i++) {
-            decC[i] = funcs.getBigNumFromB64(encC[i]);
-        }
-        bp.C = decC;
-
-        return bp;
-    },
-
-    // Batch decode a number of points
-    // 
-    // input: Array of sec1-encoded points
-    // output: Array of sec1-decoded points
-    batchDecodePoints: function(pointArr) {
-        let decPointArr = [];
-        for (let i=0; i<pointArr.length; i++) {
-            decPointArr.push(funcs.sec1DecodePoint(pointArr[i]));
-        }
-        return decPointArr;
+        return dleqProof;
     },
 
     // Decode proof string and remove prefix
@@ -478,36 +422,28 @@ const funcs = {
     parseDleqProof: function(proofStr) {
         const dleqProofM = JSON.parse(proofStr);
         let dleqProof = new Map();
-        
-        // if we do not have the same commitments then something is wrong
-        if (!funcs.validateConsistentCommitments(dleqProofM.G, dleqProofM.H)) {
-            return;
-        }
-
-        dleqProof.G = funcs.sec1DecodePoint(dleqProofM.G);
-        dleqProof.M = funcs.sec1DecodePoint(dleqProofM.M);
-        dleqProof.H = funcs.sec1DecodePoint(dleqProofM.H);
-        dleqProof.Z = funcs.sec1DecodePoint(dleqProofM.Z);
         dleqProof.R = funcs.getBigNumFromB64(dleqProofM.R);
         dleqProof.C = funcs.getBigNumFromB64(dleqProofM.C);
         return dleqProof;
     },
 
-    // Check that the commitments on the proof match the commitments
-    // in the extension
-    validateConsistentCommitments: function(G,H) {
-        if (G != activeG || H != activeH) {
-            console.error(COMMITMENT_MISMATCH_ERR);
-            return false;
-        }
-        return true;
-    },
-
-    // Return a byte array from a base-64 encoded string
+    // Return a bignum from a base-64 encoded string
     getBigNumFromB64: function(b64Str) {
         let bits = sjcl.codec.base64.toBits(b64Str);
         return sjcl.bn.fromBits(bits);
     },
+
+    // Return a bignum from a hex string
+    getBigNumFromHex: function(hex) {
+        return sjcl.bn.fromBits(sjcl.codec.hex.toBits(hex));
+    },
+
+    // PRNG encode point
+    encodePointForPRNG: function(point) {
+        let hex = sjcl.codec.hex.fromBits(point.toBits());
+        let newHex = "04" + hex;
+        return sjcl.codec.hex.toBits(newHex);
+    }
 };
 
 module.exports = funcs;

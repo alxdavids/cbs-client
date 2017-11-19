@@ -41,7 +41,7 @@ function parseIssueResponse(data, n, tokens) {
 
     // Verify the DLEQ batch proof before handing back the usable points
     console.time('verify-dleq');
-    if (!crypto.verifyBatchProof(batchProof, tokens, usablePoints)) {
+    if (!crypto.verifyProof(batchProof, tokens, usablePoints)) {
         throw new Error("[privacy-pass]: Unable to verify DLEQ proof.");
     }
     console.timeEnd('verify-dleq');
