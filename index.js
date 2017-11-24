@@ -14,7 +14,6 @@ const atob = require('atob');
 
 const LOCALHOST = '127.0.0.1';
 const PORT = 2416;
-const TOKENS_TO_SIGN = 30;
 const HOST = 'HOST';
 const PATH = 'PATH';
 let tokens;
@@ -27,11 +26,12 @@ const clientRed = new net.Socket();
 clientRed.setTimeout(3000);
 
 // Check that token signing functionality works
-function GetSignedTokens() {
+function GetSignedTokens(N, shouldRedeem) {
 	clientIss.connect(PORT, LOCALHOST, function() {
-		console.time('whole-issue');
 		console.log('Connected to ' + LOCALHOST + ":" + PORT + " for signing.");
-		const req = issUtils.GenerateWrappedIssueRequest(TOKENS_TO_SIGN);
+		console.log("***CLI_START_SIGN*** (N = " + N + ")");
+		console.time('whole-issue');
+		const req = issUtils.GenerateWrappedIssueRequest(N);
 		tokens = req.tokens;
 		console.log("Request length: " + req.wrap.length);
 		clientIss.write(req.wrap);
@@ -43,16 +43,20 @@ function GetSignedTokens() {
 
 	clientIss.on('end', function() {
 		console.log("Response length: " + completeData.length);
-		let signatures = issUtils.parseIssueResponse(completeData, TOKENS_TO_SIGN, tokens);
+		let signatures = issUtils.parseIssueResponse(completeData, N, tokens);
 		console.time('token-store');
 		storedTokens = issUtils.StoreTokens(tokens, signatures);
 		console.timeEnd('token-store');
 		clientIss.destroy();
 		console.timeEnd('whole-issue');
-		RedeemToken();
+		// Do redeem phase
+		if (shouldRedeem) {
+			RedeemToken();
+		}
 	});
 
 	clientIss.on('close', function() {
+		console.log("***CLI_END_SIGN***");
 		console.log("All good, connection closing.");
 	});
 
@@ -65,8 +69,9 @@ function GetSignedTokens() {
 // Redeem one of the tokens that we were given
 function RedeemToken() {
 	clientRed.connect(PORT, LOCALHOST, function() {
-		console.time('whole-redeem');
 		console.log('Connected to ' + LOCALHOST + ":" + PORT + " for redemption.");
+		console.log('***CLI_START_REDEEM***');
+		console.time('whole-redeem');
 		const token = storedTokens[0];
 		storedTokens = storedTokens.slice(1);
 		if (token == null) {
@@ -87,7 +92,7 @@ function RedeemToken() {
 			console.error("An error occurred server-side, redemption failed");
 			console.log(dataStr);
 		} else {
-			console.log("Successful redemption.")
+			console.log("Successful redemption.");
 		}
 		console.timeEnd('whole-redeem');
 	});
@@ -97,6 +102,7 @@ function RedeemToken() {
 	});
 
 	clientRed.on('close', function() {
+		console.log('***CLI_END_REDEEM***');
 		console.log("All good, connection closing.");
 	});
 
@@ -106,4 +112,8 @@ function RedeemToken() {
 	});
 }
 
-GetSignedTokens();
+let shouldRedeem = false;
+if (process.argv[3] === "redeem") {
+	shouldRedeem = true;
+}
+GetSignedTokens(parseInt(process.argv[2]), shouldRedeem);
