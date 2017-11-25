@@ -19,6 +19,9 @@ const PATH = 'PATH';
 let tokens;
 let storedTokens; 
 let completeData = "";
+let signReqLen = 0;
+let signRespLen = 0;
+let redReqLen = 0;
 
 const clientIss = new net.Socket();
 clientIss.setTimeout(3000);
@@ -33,7 +36,7 @@ function GetSignedTokens(N, shouldRedeem) {
 		console.time('whole-issue');
 		const req = issUtils.GenerateWrappedIssueRequest(N);
 		tokens = req.tokens;
-		console.log("Request length: " + req.wrap.length);
+		signReqLen = req.wrap.length;
 		clientIss.write(req.wrap);
 	});
 
@@ -42,7 +45,7 @@ function GetSignedTokens(N, shouldRedeem) {
 	});
 
 	clientIss.on('end', function() {
-		console.log("Response length: " + completeData.length);
+		signRespLen = completeData.length;
 		let signatures = issUtils.parseIssueResponse(completeData, N, tokens);
 		console.time('token-store');
 		storedTokens = issUtils.StoreTokens(tokens, signatures);
@@ -82,7 +85,7 @@ function RedeemToken() {
 		const redStr = redUtils.BuildRedeemHeader(token, HOST, PATH);
 		const wrappedRedReq = redUtils.GenerateWrappedRedemptionRequest(redStr, HOST, PATH);
 		console.timeEnd('redeem-req');
-		console.log("Redeem request length: " + wrappedRedReq.length);
+		redReqLen = wrappedRedReq.length;
 		clientRed.write(wrappedRedReq);
 	});
 
@@ -104,6 +107,10 @@ function RedeemToken() {
 	clientRed.on('close', function() {
 		console.log('***CLI_END_REDEEM***');
 		console.log("All good, connection closing.");
+		console.log('***MESSAGE_SIZES***');
+		console.log('Sign Request length: ' + signReqLen);
+		console.log('Sign Response length: ' + signRespLen);
+		console.log('Redeem request length: ' + redReqLen);
 	});
 
 	clientRed.on('error', function(err) {
