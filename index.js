@@ -31,6 +31,7 @@ clientRed.setTimeout(3000);
 // Check that token signing functionality works
 function GetSignedTokens(N, shouldRedeem) {
 	clientIss.connect(PORT, LOCALHOST, function() {
+		console.log('');
 		console.log('Connected to ' + LOCALHOST + ":" + PORT + " for signing.");
 		console.log("***CLI_START_SIGN*** (N = " + N + ")");
 		console.time('whole-issue');
@@ -110,7 +111,9 @@ function RedeemToken() {
 		console.log('***MESSAGE_SIZES***');
 		console.log('Sign Request length: ' + signReqLen);
 		console.log('Sign Response length: ' + signRespLen);
-		console.log('Redeem request length: ' + redReqLen);
+		if (shouldRedeem) {
+			console.log('Redeem request length: ' + redReqLen);
+		}
 	});
 
 	clientRed.on('error', function(err) {
