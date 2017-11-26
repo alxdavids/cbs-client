@@ -35,7 +35,20 @@ function GetSignedTokens(N, shouldRedeem) {
 		console.log('Connected to ' + LOCALHOST + ":" + PORT + " for signing.");
 		console.log("***CLI_START_SIGN*** (N = " + N + ")");
 		console.time('whole-issue');
-		const req = issUtils.GenerateWrappedIssueRequest(N);
+		let req;
+		while(true) {
+			try {
+				req = issUtils.GenerateWrappedIssueRequest(N);
+			} catch(e) {
+				if (e instanceof TypeError) {
+					continue;
+				} else {
+					console.error(e);
+					return;
+				}
+			}
+			break;
+		}
 		tokens = req.tokens;
 		signReqLen = req.wrap.length;
 		clientIss.write(req.wrap);
