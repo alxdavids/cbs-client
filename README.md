@@ -20,7 +20,7 @@ Currently I've had to take the methods that are required by hand from the extens
     node index.js <number-of-tokens> <opt-flags>
     ```
 
-e.g. to run with 30 tokens and with token redemption on execute:
+- e.g. to run with 30 tokens and with redemption 'on', execute:
 
     ```
     node index.js 30 redeem
