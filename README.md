@@ -8,14 +8,20 @@ Currently I've had to take the methods that are required by hand from the extens
 
 - Run an instance of the challenge-bypass-server
 
-	```
-	make all
+    ```
+    make all
 
-	.GOPATH/bin/btd -key testdata/p256-key.pem -comm testdata/test-p256-commitment
-	```
+    .GOPATH/bin/btd -key testdata/p256-key.pem -comm testdata/test-p256-commitment
+    ```
 
 - Run index.js
 
-	```
-	node index.js
-	```
+    ```
+    node index.js <number-of-tokens> <opt-flags>
+    ```
+
+e.g. to run with 30 tokens and with token redemption on execute:
+
+    ```
+    node index.js 30 redeem
+    ```
