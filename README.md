@@ -9,9 +9,7 @@ Currently I've had to take the methods that are required by hand from the extens
 - Run an instance of the challenge-bypass-server
 
     ```
-    make all
-
-    .GOPATH/bin/challenge-bypass-server -key testdata/p256-key.pem -comm testdata/test-p256-commitment
+    go run server/main.go -key testdata/p256-key.pem -comm testdata/test-p256-commitment
     ```
 
 - Run index.js
