@@ -11,7 +11,7 @@ Currently I've had to take the methods that are required by hand from the extens
     ```
     make all
 
-    .GOPATH/bin/btd -key testdata/p256-key.pem -comm testdata/test-p256-commitment
+    .GOPATH/bin/challenge-bypass-server -key testdata/p256-key.pem -comm testdata/test-p256-commitment
     ```
 
 - Run index.js
