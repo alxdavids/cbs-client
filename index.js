@@ -7,10 +7,9 @@
  */
 
 const net = require("net");
+const utils = require("./utils.js");
 const issUtils = require("./issue-utils.js");
-const redUtils = require("./redeem-utils.js");
 const sjcl = require("./sjcl-local.js");
-const atob = require("atob");
 
 const LOCALHOST = "127.0.0.1";
 const PORT = 2416;
@@ -62,7 +61,7 @@ function GetSignedTokens(N, shouldRedeem) {
     signRespLen = completeData.length;
     let signatures = issUtils.parseIssueResponse(completeData, N, tokens);
     console.time("token-store");
-    storedTokens = issUtils.StoreTokens(tokens, signatures);
+    storedTokens = utils.StoreTokens(tokens, signatures);
     console.timeEnd("token-store");
     clientIss.destroy();
     console.timeEnd("whole-issue");
@@ -89,15 +88,10 @@ function RedeemToken() {
     console.log("Connected to " + LOCALHOST + ":" + PORT + " for redemption.");
     console.log("***CLI_START_REDEEM***");
     console.time("whole-redeem");
-    const token = storedTokens[0];
-    storedTokens = storedTokens.slice(1);
-    if (token == null) {
-      console.error("Token is null");
-      clientRed.destroy();
-    }
+    const token = getTokenForSpend();
     console.time("redeem-req");
-    const redStr = redUtils.BuildRedeemHeader(token, HOST, PATH);
-    const wrappedRedReq = redUtils.GenerateWrappedRedemptionRequest(
+    const redStr = utils.BuildRedeemHeader(token, HOST, PATH);
+    const wrappedRedReq = utils.GenerateWrappedRedemptionRequest(
       redStr,
       HOST,
       PATH
@@ -139,6 +133,18 @@ function RedeemToken() {
     console.error(err);
     clientRed.destroy();
   });
+}
+
+function getTokenForSpend() {
+  const t = storedTokens[0];
+  storedTokens = storedTokens.slice(1);
+  let usablePoint = utils.decodeStorablePoint(t.point);
+  let usableBlind = new sjcl.bn(t.blind);
+  if (t.token == null) {
+    console.error("Token is null");
+    clientRed.destroy();
+  }
+  return {token: t.token, point: usablePoint, blind: usableBlind};
 }
 
 let shouldRedeem = false;
