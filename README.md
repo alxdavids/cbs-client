@@ -6,20 +6,22 @@ Currently I've had to take the methods that are required by hand from the extens
 
 ## Quickstart
 
+- `yarn build`
+
 - Run an instance of the challenge-bypass-server
 
     ```
     go run server/main.go -key testdata/p256-key.pem -comm testdata/test-p256-commitment
     ```
 
-- Run index.js
+- Run index.js (for signing only)
 
     ```
-    node index.js <number-of-tokens> <opt-flags>
+    yarn run:sign
     ```
 
-- e.g. to run with 30 tokens and with redemption 'on', execute:
+- Run index.js (with redemption as well)
 
     ```
-    node index.js 30 redeem
+    yarn run:redeem
     ```
