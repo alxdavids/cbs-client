@@ -9,6 +9,8 @@ const rewire = require('rewire');
 const createShake256 = require('./challenge-bypass-extension/addon/scripts/keccak.js');
 const testCommitment = require('./test-config.js')
 const src = rewire('./challenge-bypass-extension/addon/compiled/test_compiled.js');
+var XMLHttpRequest = require("xmlhttprequest").XMLHttpRequest;
+src.__set__("XMLHttpRequest", XMLHttpRequest);
 
 // define and set localStorage
 const localStorage = require('node-localstorage');
