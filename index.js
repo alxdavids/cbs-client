@@ -10,13 +10,14 @@ const net = require("net");
 const utils = require("./utils.js");
 const issUtils = require("./issue-utils.js");
 const sjcl = require("./sjcl-local.js");
+const rewire = require('rewire');
+const src = rewire('./challenge-bypass-extension/addon/compiled/test_compiled.js');
 
 const LOCALHOST = "127.0.0.1";
 const PORT = 2416;
+let tokens;
 const HOST = "HOST";
 const PATH = "PATH";
-let tokens;
-let storedTokens;
 let completeData = "";
 let signReqLen = 0;
 let signRespLen = 0;
@@ -29,11 +30,15 @@ clientRed.setTimeout(3000);
 
 // Check that token signing functionality works
 function GetSignedTokens(N, shouldRedeem) {
+  if (shouldRedeem) {
+    // define and set localStorage
+    localStorage = utils.localStorage;
+    localStorage.setItem = function(k, v) { localStorage[k] = v; if (k == 'bypass-tokens-1') { RedeemToken(); } };
+    src.__set__('localStorage', localStorage);
+  }
   clientIss.connect(PORT, LOCALHOST, function() {
     console.log("");
     console.log("Connected to " + LOCALHOST + ":" + PORT + " for signing.");
-    console.log("***CLI_START_SIGN*** (N = " + N + ")");
-    console.time("whole-issue");
     let req;
     while (true) {
       try {
@@ -59,21 +64,11 @@ function GetSignedTokens(N, shouldRedeem) {
 
   clientIss.on("end", function() {
     signRespLen = completeData.length;
-    let signatures = issUtils.parseIssueResponse(completeData, N, tokens);
-    console.time("token-store");
-    storedTokens = utils.StoreTokens(tokens, signatures);
-    console.timeEnd("token-store");
+    issUtils.parseIssueResponse(completeData, tokens);
     clientIss.destroy();
-    console.timeEnd("whole-issue");
-    // Do redeem phase
-    if (shouldRedeem) {
-      RedeemToken();
-    }
   });
 
   clientIss.on("close", function() {
-    console.log("***CLI_END_SIGN***");
-    console.log("All good, connection closing.");
   });
 
   clientIss.on("error", function(err) {
@@ -90,34 +85,30 @@ function RedeemToken() {
     console.time("whole-redeem");
     const token = getTokenForSpend();
     console.time("redeem-req");
-    const redStr = utils.BuildRedeemHeader(token, HOST, PATH);
-    const wrappedRedReq = utils.GenerateWrappedRedemptionRequest(
-      redStr,
-      HOST,
-      PATH
-    );
+    const redStr = utils.funcs.BuildRedeemHeader(token, HOST, PATH);
+    const wrappedRedReq = utils.funcs.GenerateWrappedRedemptionRequest(redStr, HOST, PATH);
     console.timeEnd("redeem-req");
     redReqLen = wrappedRedReq.length;
     clientRed.end(wrappedRedReq);
   });
-
+  
   clientRed.on("data", function(data) {
-    const dataStr = sjcl.codec.utf8String.fromBits(
-      sjcl.codec.bytes.toBits(data)
-    );
-    if (dataStr !== "success") {
-      console.error("An error occurred server-side, redemption failed");
-      console.log(dataStr);
-    } else {
-      console.log("Successful redemption.");
+    if (data) {
+      const dataStr = sjcl.codec.utf8String.fromBits(sjcl.codec.bytes.toBits(data));
+      if (dataStr !== "success") {
+        console.error("An error occurred server-side, redemption failed");
+        console.log(dataStr);
+      } else {
+        console.log("Successful redemption.");
+      }
+      console.timeEnd("whole-redeem");
     }
-	console.timeEnd("whole-redeem");
   });
-
+  
   clientRed.on("end", function() {
     clientRed.destroy();
   });
-
+  
   clientRed.on("close", function() {
     console.log("***CLI_END_REDEEM***");
     console.log("All good, connection closing.");
@@ -128,17 +119,19 @@ function RedeemToken() {
       console.log("Redeem request length: " + redReqLen);
     }
   });
-
+  
   clientRed.on("error", function(err) {
     console.error(err);
     clientRed.destroy();
   });
 }
-
+  
 function getTokenForSpend() {
+  let tokenStr = localStorage.getItem('bypass-tokens-1');
+  let storedTokens = JSON.parse(tokenStr);
   const t = storedTokens[0];
   storedTokens = storedTokens.slice(1);
-  let usablePoint = utils.decodeStorablePoint(t.point);
+  let usablePoint = utils.funcs.decodeStorablePoint(t.point);
   let usableBlind = new sjcl.bn(t.blind);
   if (t.token == null) {
     console.error("Token is null");

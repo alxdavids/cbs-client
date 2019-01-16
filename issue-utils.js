@@ -8,53 +8,22 @@
 
 "use strict";
 const utils = require('./utils.js');
-const atob = require('atob');
+const funcs = utils.funcs;
+const url = require('url');
 
 // Parse the marshaled response from the server
-function parseIssueResponse(data, n, tokens) {
-    // decodes base-64
-    const signaturesJSON = atob(data);
-    // parses into JSON
-    const issueResp = JSON.parse(signaturesJSON);
-    let batchProof;
-    let signatures;
-    // Only separate the batch proof if it has been sent (it should be included in the
-    // last element of the array).
-    if (n == issueResp.length-1) {
-        batchProof = issueResp[issueResp.length - 1];
-        signatures = issueResp.slice(0, issueResp.length - 1);
-    } else {
-        signatures = issueResp;
-    }
-
-    let usablePoints = [];
-    console.time('parse-all');
-    signatures.forEach(function(signature) {
-        let usablePoint = utils.sec1DecodePoint(signature);
-        if (usablePoint == null) {
-            throw new Error("[privacy-pass]: unable to decode point " + signature + " in " + JSON.stringify(signatures));
-        }
-        usablePoints.push(usablePoint);
-    });
-    console.timeEnd('parse-all');
-
-    // Verify the DLEQ batch proof before handing back the usable points
-    console.time('verify-dleq');
-    if (!utils.verifyProof(batchProof, tokens, usablePoints)) {
-        throw new Error("[privacy-pass]: Unable to verify DLEQ proof.");
-    }
-    console.timeEnd('verify-dleq');
-
-    return usablePoints;
+function parseIssueResponse(data, tokens) {
+    let formattedData = 'signatures=' + data;
+    funcs.validateResponse(url.parse('example.com'), '1', formattedData, tokens);
 }
 
 // Generates n tokens and returns a wrapped issue request
 function GenerateWrappedIssueRequest(n) {
     console.time('token-gen');
-	const tokens = utils.GenerateNewTokens(n);
+	const tokens = funcs.GenerateNewTokens(n);
     console.timeEnd('token-gen');
     console.time('issue-req');
-	const issueReq = utils.BuildIssueRequest(tokens);
+	const issueReq = funcs.BuildIssueRequest(tokens);
     console.timeEnd('issue-req');
 	return {wrap: WrapIssueRequest(issueReq), tokens: tokens};
 }
