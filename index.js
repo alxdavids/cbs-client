@@ -1,6 +1,3 @@
-/*jshint esversion: 6 */
-/*jshint node: true */
-
 /**
  * A node.js client for talking to the Cloudflare challenge-bypass-server
  * Extension scripts included as submodule

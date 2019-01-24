@@ -7,7 +7,7 @@ const btoa = require('btoa');
 const atob = require('atob');
 const net = require('net');
 const rewire = require('rewire');
-const createShake256 = require('./challenge-bypass-extension/addon/scripts/keccak.js');
+const createShake256 = require('./challenge-bypass-extension/src/crypto/keccak/keccak.js');
 const src = rewire('./challenge-bypass-extension/addon/compiled/test_compiled.js');
 var XMLHttpRequest = require("xmlhttprequest").XMLHttpRequest;
 src.__set__("XMLHttpRequest", XMLHttpRequest);
