@@ -9,6 +9,7 @@ const issUtils = require("./issue-utils.js");
 const sjcl = require("./sjcl-local.js");
 const rewire = require('rewire');
 const src = rewire('./challenge-bypass-extension/addon/compiled/test_compiled.js');
+src.__set__('COMMITMENT_URL', 'https://raw.githubusercontent.com/alxdavids/cbs-client/master/test-commitments/ec-commitments.json');
 
 const LOCALHOST = "127.0.0.1";
 const PORT = 2416;
