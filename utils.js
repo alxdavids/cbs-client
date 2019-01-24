@@ -28,7 +28,8 @@ src.__set__('updateBrowserTab', function(){});
 // choose config
 const setConfig = src.__get__("setConfig");
 setConfig(1);
-src.__set__("DEV", true);
+src.__set__('SIGN_RESPONSE_FMT', 'json');
+src.__set__('COMMITMENT_URL', 'https://raw.githubusercontent.com/alxdavids/cbs-client/master/test-commitments/ec-commitments.json');
 
 const funcs = {
   /**
@@ -95,7 +96,7 @@ const funcs = {
   
   // input: bits
   // output: point
-  hashToCurve: src.__get__("hashToCurve"),
+  hashToCurve: src.__get__("hashAndIncToCurve"),
   
   // Attempts to decompress the bytes into a curve point following SEC1 and
   // assuming it's a Weierstrass curve with a = -3 and p = 3 mod 4 (true for the

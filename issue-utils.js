@@ -13,7 +13,7 @@ const url = require('url');
 
 // Parse the marshaled response from the server
 function parseIssueResponse(data, tokens) {
-    let formattedData = 'signatures=' + data;
+    let formattedData = JSON.stringify({ signatures: data });
     funcs.validateResponse(url.parse('example.com'), '1', formattedData, tokens);
 }
 

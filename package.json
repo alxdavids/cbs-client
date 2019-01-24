@@ -26,9 +26,10 @@
     "xmlhttprequest": "^1.8.0"
   },
   "scripts": {
-    "build": "yarn install && cd challenge-bypass-extension && yarn install && yarn build && yarn test",
+    "build": "yarn install && cd challenge-bypass-extension && yarn install && yarn build:all && yarn test:ext",
     "run:sign": "node index.js 10",
     "run:redeem": "node index.js 10 redeem",
+    "run:twokey": "node index.js 10 twokey",
     "test": "jest"
   }
 }

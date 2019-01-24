@@ -25,3 +25,15 @@ Currently I've had to take the methods that are required by hand from the extens
     ```
     yarn run:redeem
     ```
+
+- Run index.js (with two-key redemption)
+
+    ```
+    yarn run:twokey
+    ```
+
+- Rebuild challenge-bypass-extension (after making changes)
+
+    ```
+    yarn build
+    ```

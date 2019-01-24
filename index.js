@@ -9,11 +9,19 @@ const issUtils = require("./issue-utils.js");
 const sjcl = require("./sjcl-local.js");
 const rewire = require('rewire');
 const src = rewire('./challenge-bypass-extension/addon/compiled/test_compiled.js');
-src.__set__('COMMITMENT_URL', 'https://raw.githubusercontent.com/alxdavids/cbs-client/master/test-commitments/ec-commitments.json');
 
 const LOCALHOST = "127.0.0.1";
 const PORT = 2416;
 let tokens;
+let tokensOne;
+let tokensTwo;
+let dataOne = "";
+let dataTwo = "";
+let key = 'bypass-tokens-';
+let keyOne = key + '1';
+let keyTwo = key + '2';
+let countKeyOne = key + 'count-1';
+let countKeyTwo = key + 'count-2';
 const HOST = "HOST";
 const PATH = "PATH";
 let completeData = "";
@@ -30,8 +38,8 @@ clientRed.setTimeout(3000);
 function GetSignedTokens(N, shouldRedeem) {
   if (shouldRedeem) {
     // define and set localStorage
-    localStorage = utils.localStorage;
-    localStorage.setItem = function(k, v) { localStorage[k] = v; if (k == 'bypass-tokens-1') { RedeemToken(); } };
+    let localStorage = utils.localStorage;
+    localStorage.setItem = function(k, v) { localStorage[k] = v; if (k == keyOne) { RedeemToken(); } };
     src.__set__('localStorage', localStorage);
   }
   clientIss.connect(PORT, LOCALHOST, function() {
@@ -81,7 +89,7 @@ function RedeemToken() {
     console.log("Connected to " + LOCALHOST + ":" + PORT + " for redemption.");
     console.log("***CLI_START_REDEEM***");
     console.time("whole-redeem");
-    const token = getTokenForSpend('bypass-tokens-1');
+    const token = getTokenForSpend(keyOne);
     console.time("redeem-req");
     const redStr = utils.funcs.BuildRedeemHeader(token, HOST, PATH);
     const wrappedRedReq = utils.funcs.GenerateWrappedRedemptionRequest(redStr, HOST, PATH);
@@ -113,9 +121,7 @@ function RedeemToken() {
     console.log("***MESSAGE_SIZES***");
     console.log("Sign Request length: " + signReqLen);
     console.log("Sign Response length: " + signRespLen);
-    if (shouldRedeem) {
-      console.log("Redeem request length: " + redReqLen);
-    }
+    console.log("Redeem request length: " + redReqLen);
   });
   
   clientRed.on("error", function(err) {
@@ -126,22 +132,35 @@ function RedeemToken() {
 
 // Gets tokens signed under two keys and then tries to redeem from both
 function TwoKeySign(N, firstPass) {
+  if (firstPass) {
+    localStorage = utils.localStorage;
+    localStorage.setItem = function(k, v) { localStorage[k] = v; if (k == keyOne) { setTimeout(TwoKeySign, 3000, N, false); } };
+    src.__set__('localStorage', localStorage);
+  } else {
+    localStorage.setItem = function(k, v) { 
+      if (k == keyOne) {
+        k = keyTwo
+      } else if (k == countKeyOne) { 
+        k = countKeyTwo
+      } 
+      localStorage[k] = v;
+      if (k == keyTwo) { 
+        TwoKeyRedeem(true); 
+      } 
+    };
+    src.__set__('localStorage', localStorage);
+  }
+
+  let clientTwoKeyIss = new net.Socket();
+  clientTwoKeyIss.setTimeout(3000);
   let port;
   if (firstPass) {
     port = 2426;
   } else {
     port = 2427;
   }
-
-  if (firstPass) {
-    localStorage = utils.localStorage;
-    localStorage.setItem = function(k, v) { localStorage[k] = v; if (k == 'bypass-tokens-1') { TwoKeySign(N, false) } };
-  } else {
-    localStorage.setItem = function(k, v) { localStorage[k] = v; if (k == 'bypass-tokens-2') { TwoKeyRedeem(true) } };
-  }
-  src.__set__('localStorage', localStorage);
-
-  clientIss.connect(port, LOCALHOST, function() {
+  
+  clientTwoKeyIss.connect(port, LOCALHOST, function() {
     console.log("");
     console.log("Connected to " + LOCALHOST + ":" + port + " for signing.");
     let req;
@@ -158,40 +177,58 @@ function TwoKeySign(N, firstPass) {
       }
       break;
     }
-    tokens = req.tokens;
+    if (firstPass) {
+      tokensOne = req.tokens;
+    } else {
+      tokensTwo = req.tokens;
+    }
     signReqLen = req.wrap.length;
-    clientIss.end(req.wrap);
+    clientTwoKeyIss.end(req.wrap);
   });
 
-  clientIss.on("data", function(data) {
-    completeData += data;
+  clientTwoKeyIss.on("data", function(data) {
+    if (firstPass) {
+      dataOne += data; 
+    } else {
+      dataTwo += data; 
+    }
   });
 
-  clientIss.on("end", function() {
-    signRespLen = completeData.length;
-    issUtils.parseIssueResponse(completeData, tokens);
-    clientIss.destroy();
+  clientTwoKeyIss.on("end", function() {
+    if (firstPass) {
+      signRespLen = dataOne.length;
+      issUtils.parseIssueResponse(dataOne, tokensOne); 
+    } else {
+      signRespLen = dataTwo.length;
+      src.__set__("CONFIG_ID", '2');
+      src.__set__("CONFIG_ID", '2');
+      issUtils.parseIssueResponse(dataTwo, tokensTwo);
+    }
+    clientTwoKeyIss.destroy();
   });
 
-  clientIss.on("close", function() {
+  clientTwoKeyIss.on("close", function() {
+    console.log('closing');
   });
 
-  clientIss.on("error", function(err) {
+  clientTwoKeyIss.on("error", function(err) {
     console.error(err);
-    clientIss.destroy();
+    clientTwoKeyIss.destroy();
   });
 }
 
 // Redeem one of the tokens that we were given
 function TwoKeyRedeem(firstPass) {
+  const clientTwoKeyRed = new net.Socket();
+  clientTwoKeyRed.setTimeout(1000);
   let key;
   if (firstPass) {
-    key = 'bypass-tokens-1';
+    key = keyOne;
   } else {
-    key = 'bypass-tokens-2';
+    key = keyTwo;
   }
 
-  clientRed.connect(PORT, LOCALHOST, function() {
+  clientTwoKeyRed.connect(PORT, LOCALHOST, function() {
     console.log("Connected to " + LOCALHOST + ":" + PORT + " for redemption.");
     if (firstPass) {
       console.log('***NEW_REDEEM***');
@@ -206,10 +243,10 @@ function TwoKeyRedeem(firstPass) {
     const wrappedRedReq = utils.funcs.GenerateWrappedRedemptionRequest(redStr, HOST, PATH);
     console.timeEnd("redeem-req");
     redReqLen = wrappedRedReq.length;
-    clientRed.end(wrappedRedReq);
+    clientTwoKeyRed.end(wrappedRedReq);
   });
   
-  clientRed.on("data", function(data) {
+  clientTwoKeyRed.on("data", function(data) {
     if (data) {
       const dataStr = sjcl.codec.utf8String.fromBits(sjcl.codec.bytes.toBits(data));
       if (dataStr !== "success") {
@@ -222,20 +259,22 @@ function TwoKeyRedeem(firstPass) {
     }
   });
   
-  clientRed.on("end", function() {
-    clientRed.destroy();
+  clientTwoKeyRed.on("end", function() {
+    clientTwoKeyRed.destroy();
   });
   
-  clientRed.on("close", function() {
+  clientTwoKeyRed.on("close", function() {
     console.log("***CLI_END_REDEEM***");
     console.log("All good, connection closing.");
     console.log("Redeem request length: " + redReqLen);
-    TwoKeyRedeem(false);
+    if (firstPass) {
+      TwoKeyRedeem(false);
+    }
   });
   
-  clientRed.on("error", function(err) {
+  clientTwoKeyRed.on("error", function(err) {
     console.error(err);
-    clientRed.destroy();
+    clientTwoKeyRed.destroy();
   });
 }
   
@@ -248,7 +287,7 @@ function getTokenForSpend(key) {
   let usableBlind = new sjcl.bn(t.blind);
   if (t.token == null) {
     console.error("Token is null");
-    clientRed.destroy();
+    clientTwoKeyRed.destroy();
   }
   return {token: t.token, point: usablePoint, blind: usableBlind};
 }
